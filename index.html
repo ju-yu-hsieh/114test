@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>114商管群題庫</title>
+    <style>
+        body { font-family: "Microsoft JhengHei", sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: auto; }
+        h1 { text-align: center; }
+        .bold { font-weight: bold; }
+        .setup-section { background: #f4f4f4; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .question-box { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+        .options-label { display: block; margin: 5px 0; cursor: pointer; }
+        .correct-text { color: blue; font-weight: bold; }
+        .wrong-text { color: red; font-weight: bold; }
+        footer { margin-top: 50px; text-align: center; border-top: 1px solid #ccc; padding-top: 10px; }
+        #result-area { margin-top: 20px; display: none; }
+        .btn { padding: 10px 20px; font-size: 16px; cursor: pointer; margin-right: 10px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <h1 class="bold">114商管群題庫</h1>
+
+    <div class="setup-section" id="setup-form">
+        <p>學號：<input type="text" id="stu-id" placeholder="請輸入學號"> 
+           姓名：<input type="text" id="stu-name" placeholder="請輸入姓名"></p>
+        <p>練習範圍：第 <input type="number" id="range-start" value="1" min="1" max="250" style="width: 60px;"> 題 
+           至 第 <input type="number" id="range-end" value="250" min="1" max="250" style="width: 60px;"> 題</p>
+        <p>抽取題數：
+            <select id="draw-count">
+                <option value="10">10</option><option value="20">20</option>
+                <option value="30">30</option><option value="40">40</option>
+                <option value="50">50</option>
+            </select>
+        </p>
+        <button class="btn" onclick="startExercise()">開始練習</button>
+    </div>
+
+    <div id="quiz-area" class="hidden">
+        <div id="questions-container"></div>
+        <button class="btn" onclick="submitQuiz()">繳交</button>
+    </div>
+
+    <div id="result-area">
+        <h2 class="bold">練習結果</h2>
+        <p id="score-summary"></p>
+        <div id="wrong-list"></div>
+        <hr>
+        <button class="btn" onclick="saveToFile()">儲存作答記錄 (.txt)</button>
+        <button class="btn" onclick="location.reload()">重新練習</button>
+    </div>
+
+    <footer class="bold">@三重商工資處科 謝佳儒老師建置</footer>
+
+    <script src="questions.js"></script>
+   <script>
+    let currentQuestions = [];
+    let finalStats = { correct: 0, wrong: 0, details: "" };
+
+    // 洗牌演算法
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function startExercise() {
+        const start = parseInt(document.getElementById('range-start').value);
+        const end = parseInt(document.getElementById('range-end').value);
+        const count = parseInt(document.getElementById('draw-count').value);
+
+        // 檢查範圍
+        if ((end - start + 1) < 10) { alert("練習區間最少需包含 10 題！"); return; }
+        
+        // 篩選範圍內的題目
+        let filtered = questionBank.filter(q => q.id >= start && q.id <= end);
+        if (filtered.length < count) { 
+            alert(`目前範圍內（第${start}題至第${end}題）僅有 ${filtered.length} 題，不足抽取的 ${count} 題，請調整範圍或題數。`); 
+            return; 
+        }
+
+        // 隨機抽取題數
+        currentQuestions = shuffle([...filtered]).slice(0, count);
+        
+        const container = document.getElementById('questions-container');
+        container.innerHTML = '';
+
+        currentQuestions.forEach((q, idx) => {
+            // 將選項物件化，記錄它是否為正確答案
+            let opts = q.options.map((text, i) => ({
+                text: text,
+                isCorrect: (i + 1) === q.answer
+            }));
+
+            // 隨機排列該題的選項順序
+            shuffle(opts);
+            
+            let qHtml = `<div class="question-box"><p class="bold">${idx + 1}. [第 ${q.id} 題] ${q.question}</p>`;
+            
+            // 使用 A, B, C, D 作為顯示標籤，不顯示原始編號
+            const labels = ['A', 'B', 'C', 'D'];
+            opts.forEach((o, i) => {
+                qHtml += `
+                    <label class="options-label">
+                        <input type="radio" name="q${q.id}" value="${o.isCorrect}" data-ans-text="${o.text}"> 
+                        (${labels[i]}) ${o.text}
+                    </label>`;
+            });
+            qHtml += `</div>`;
+            container.innerHTML += qHtml;
+        });
+
+        document.getElementById('setup-form').classList.add('hidden');
+        document.getElementById('quiz-area').classList.remove('hidden');
+        window.scrollTo(0, 0);
+    }
+
+    function submitQuiz() {
+        let correct = 0, wrong = 0, wrongDetails = "";
+        
+        currentQuestions.forEach(q => {
+            const selected = document.querySelector(`input[name="q${q.id}"]:checked`);
+            const isCorrect = selected ? selected.value === "true" : false;
+            
+            if (isCorrect) {
+                correct++;
+            } else {
+                wrong++;
+                // 獲取原始題庫中的正確答案文字
+                const correctText = q.options[q.answer - 1];
+                wrongDetails += `第 ${q.id} 題：${q.question}\n正確答案：(${q.answer}) ${correctText}\n\n`;
+            }
+        });
+
+        finalStats = { correct, wrong, wrongDetails };
+        
+        // 顯示結果
+        document.getElementById('score-summary').innerHTML = `
+            答對題數：<span class="correct-text">${correct}</span> | 
+            答錯題數：<span class="wrong-text">${wrong}</span>
+        `;
+        
+        document.getElementById('wrong-list').innerHTML = wrong > 0 
+            ? `<h3 class="wrong-text">【錯題記錄】</h3><pre style="white-space: pre-wrap;">${wrongDetails}</pre>` 
+            : "<p class='correct-text'>全對！太棒了！</p>";
+            
+        document.getElementById('result-area').style.display = 'block';
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function saveToFile() {
+        const id = document.getElementById('stu-id').value || "無學號";
+        const name = document.getElementById('stu-name').value || "無姓名";
+        const start = document.getElementById('range-start').value;
+        const end = document.getElementById('range-end').value;
+        const count = document.getElementById('draw-count').value;
+        
+        const now = new Date();
+        const dateStr = now.getFullYear() + 
+                        (now.getMonth() + 1).toString().padStart(2, '0') + 
+                        now.getDate().toString().padStart(2, '0');
+
+        let content = `-----------------------------------------------\n`;
+        content += `練習日期：${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')}\n`;
+        content += `練習題庫：114商管群題庫\n`;
+        content += `學生學號：${id}\n`;
+        content += `學生姓名：${name}\n`;
+        content += `練習範圍：第 ${start} 題至第 ${end} 題 (抽 ${count} 題)\n`;
+        content += `---\n`;
+        content += `答對題數：${finalStats.correct}\n`;
+        content += `答錯題數：${finalStats.wrong}\n`;
+        content += `---\n`;
+        content += `【錯題記錄】\n${finalStats.wrongDetails}`;
+
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${id}_${dateStr}.txt`;
+        link.click();
+    }
+</script>
+</body>
+</html>
